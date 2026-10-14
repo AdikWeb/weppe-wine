@@ -23,8 +23,8 @@ echo "Installing Steam"
 "$WINE" "$results/SteamSetup.exe" /S
 [ -f "$steam_dir/steam.exe" ] || fail "Steam did not install into $steam_dir"
 
-echo "Starting Steam"
-"$WINE" "$steam_dir/steam.exe" > "$results/steam.log" 2>&1 &
+echo "Starting Steam ${STEAM_ARGUMENTS:-without arguments}"
+"$WINE" "$steam_dir/steam.exe" ${STEAM_ARGUMENTS:-} > "$results/steam.log" 2>&1 &
 start=$(date +%s)
 while :; do
     sleep "$poll_seconds"
