@@ -1,0 +1,8 @@
+bcrypt-des.patch
+d3dx9-check-version-debug.patch
+faudio-wma-bytes-requested.patch
+mfreadwrite-shared-samples.patch
+winemac-dxmt.patch
+winemac-flush-deadlock.patch
+winemac-remote-metal.patch
+winemac-dxmt-child-windows.patch

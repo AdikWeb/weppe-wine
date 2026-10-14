@@ -1,0 +1,258 @@
+Let DXMT present into child windows of its own process.
+
+A child window has no Cocoa window, so the external window data handed DXMT
+nothing and it dereferenced NULL. Give such a window a client surface over its
+area of the top-level window, as Vulkan and OpenGL get one, and keep it placed
+when windows move, resize or are destroyed.
+
+--- a/dlls/winemac.drv/window.c	2026-10-14 07:08:53.346910728 +0500
++++ b/dlls/winemac.drv/window.c	2026-10-14 07:09:48.422716951 +0500
+@@ -648,6 +648,134 @@
+     free(items);
+ }
+ 
++struct child_surface
++{
++    struct client_surface *client;
++    WineContentView       *view;
++    WineMetalView         *metal_view;
++};
++
++static pthread_mutex_t child_surfaces_mutex = PTHREAD_MUTEX_INITIALIZER;
++static struct child_surface *child_surfaces;
++static unsigned int child_surface_count, child_surface_capacity;
++
++static BOOL add_child_surface(struct client_surface *client)
++{
++    BOOL added = FALSE;
++
++    pthread_mutex_lock(&child_surfaces_mutex);
++    if (child_surface_count == child_surface_capacity)
++    {
++        unsigned int capacity = max(16, child_surface_capacity * 2);
++        struct child_surface *items = realloc(child_surfaces, capacity * sizeof(*items));
++        if (items)
++        {
++            child_surfaces = items;
++            child_surface_capacity = capacity;
++        }
++    }
++    if (child_surface_count < child_surface_capacity)
++    {
++        child_surfaces[child_surface_count].client = client;
++        child_surfaces[child_surface_count].view = impl_from_client_surface(client)->cocoa_view;
++        child_surfaces[child_surface_count].metal_view = NULL;
++        child_surface_count++;
++        added = TRUE;
++    }
++    pthread_mutex_unlock(&child_surfaces_mutex);
++    return added;
++}
++
++static void set_child_surface_metal_view(WineContentView *view, WineMetalView *metal_view)
++{
++    unsigned int i;
++
++    pthread_mutex_lock(&child_surfaces_mutex);
++    for (i = 0; i < child_surface_count; i++)
++    {
++        if (child_surfaces[i].view != view || child_surfaces[i].metal_view) continue;
++        child_surfaces[i].metal_view = metal_view;
++        break;
++    }
++    pthread_mutex_unlock(&child_surfaces_mutex);
++}
++
++static struct client_surface *take_child_surface(struct client_surface *client, WineMetalView *metal_view)
++{
++    struct client_surface *taken = NULL;
++    unsigned int i;
++
++    pthread_mutex_lock(&child_surfaces_mutex);
++    for (i = 0; i < child_surface_count; i++)
++    {
++        if (metal_view ? child_surfaces[i].metal_view != metal_view
++                       : child_surfaces[i].client != client || child_surfaces[i].metal_view) continue;
++        taken = child_surfaces[i].client;
++        child_surfaces[i] = child_surfaces[--child_surface_count];
++        break;
++    }
++    pthread_mutex_unlock(&child_surfaces_mutex);
++    return taken;
++}
++
++static struct client_surface **child_surfaces_matching(HWND hwnd, BOOL whole_tree, unsigned int *count)
++{
++    struct client_surface **ret;
++    unsigned int all = 0, i;
++    HWND key = whole_tree ? NtUserGetAncestor(hwnd, GA_ROOT) : hwnd;
++
++    *count = 0;
++    pthread_mutex_lock(&child_surfaces_mutex);
++    if ((ret = malloc(max(1, child_surface_count) * sizeof(*ret))))
++    {
++        for (i = 0; i < child_surface_count; i++)
++        {
++            client_surface_add_ref(child_surfaces[i].client);
++            ret[all++] = child_surfaces[i].client;
++        }
++    }
++    pthread_mutex_unlock(&child_surfaces_mutex);
++    if (!ret) return NULL;
++
++    for (i = 0; i < all; i++)
++    {
++        HWND surface_hwnd = ret[i]->hwnd;
++        if (surface_hwnd && (whole_tree ? NtUserGetAncestor(surface_hwnd, GA_ROOT) : surface_hwnd) == key)
++            ret[(*count)++] = ret[i];
++        else
++            client_surface_release(ret[i]);
++    }
++    return ret;
++}
++
++static void update_child_surfaces(HWND hwnd)
++{
++    struct client_surface **clients;
++    unsigned int count, i;
++
++    if (!(clients = child_surfaces_matching(hwnd, TRUE, &count))) return;
++    for (i = 0; i < count; i++)
++    {
++        if (NtUserIsWindow(clients[i]->hwnd)) client_surface_present(clients[i]);
++        client_surface_release(clients[i]);
++    }
++    free(clients);
++}
++
++static void hide_child_surfaces(HWND hwnd)
++{
++    struct client_surface **clients;
++    unsigned int count, i;
++
++    if (!(clients = child_surfaces_matching(hwnd, FALSE, &count))) return;
++    for (i = 0; i < count; i++)
++    {
++        macdrv_set_view_hidden(impl_from_client_surface(clients[i])->cocoa_view, TRUE);
++        client_surface_release(clients[i]);
++    }
++    free(clients);
++}
++
+ static void create_cocoa_window(struct macdrv_win_data *data)
+ {
+     struct macdrv_thread_data *thread_data = macdrv_init_thread_data();
+@@ -1468,6 +1596,7 @@
+ 
+     TRACE("%p\n", hwnd);
+ 
++    hide_child_surfaces(hwnd);
+     if (!(data = get_win_data(hwnd))) return;
+ 
+     if (data->drag_event) NtSetEvent(data->drag_event, NULL);
+@@ -1849,6 +1978,7 @@
+     if (!(data = get_win_data(hwnd)))
+     {
+         update_hosted_remote_layers(hwnd);
++        update_child_surfaces(hwnd);
+         return;
+     }
+ 
+@@ -1904,6 +2034,7 @@
+     release_win_data(data);
+     /* After the top-level window's rects are updated, which the layers are placed against. */
+     update_hosted_remote_layers(hwnd);
++    update_child_surfaces(hwnd);
+ }
+ 
+ 
+@@ -2439,6 +2570,7 @@
+     WineContentView         *cocoa_view;
+     WineContentView         *client_cocoa_view;
+     struct macdrv_win_data  *data;
++    struct client_surface   *child_surface;
+ };
+ 
+ /* A window of another process (Chromium's GPU process presents into the browser's window):
+@@ -2525,6 +2657,29 @@
+     return swapchain;
+ }
+ 
++static struct external_win_data *external_child_win_data(HWND hwnd)
++{
++    struct external_win_data *ret;
++    struct client_surface *client;
++    DWORD root_pid = 0;
++
++    NtUserGetWindowThread(NtUserGetAncestor(hwnd, GA_ROOT), &root_pid);
++    if (root_pid != GetCurrentProcessId()) return NULL;
++    if (!(client = macdrv_CreateClientSurface(hwnd, 0, FALSE))) return NULL;
++    if (!(ret = calloc(1, sizeof(*ret))) || !add_child_surface(client))
++    {
++        free(ret);
++        client_surface_release(client);
++        return NULL;
++    }
++    TRACE("hwnd %p: child surface %p\n", hwnd, client);
++    ret->hwnd = hwnd;
++    ret->cocoa_view = impl_from_client_surface(client)->cocoa_view;
++    ret->client_cocoa_view = ret->cocoa_view;
++    ret->child_surface = client;
++    return ret;
++}
++
+ static struct external_win_data *external_get_win_data(HWND hwnd)
+ {
+     struct macdrv_win_data *data;
+@@ -2547,7 +2702,12 @@
+         ret->client_cocoa_view = (WineContentView *)swapchain;
+         return ret;
+     }
+-    if (!data->cocoa_window || !(ret = malloc(sizeof(*ret))))
++    if (!data->cocoa_window)
++    {
++        release_win_data(data);
++        return external_child_win_data(hwnd);
++    }
++    if (!(ret = calloc(1, sizeof(*ret))))
+     {
+         release_win_data(data);
+         return NULL;
+@@ -2562,7 +2722,13 @@
+ 
+ static WineMetalView *external_create_metal_view(WineContentView *view, id_MTLDevice device)
+ {
+-    if (!is_remote_swapchain(view)) return macdrv_view_create_new_metal_view(view, device);
++    WineMetalView *metal_view;
++
++    if (!is_remote_swapchain(view))
++    {
++        if ((metal_view = macdrv_view_create_new_metal_view(view, device))) set_child_surface_metal_view(view, metal_view);
++        return metal_view;
++    }
+     macdrv_swapchain_set_device((id_WineMetalSwapChain)view, device);
+     return (WineMetalView *)view;
+ }
+@@ -2577,7 +2743,10 @@
+ {
+     if (!is_remote_swapchain(view))
+     {
++        struct client_surface *client = take_child_surface(NULL, view);
++
+         macdrv_view_release_metal_view(view);
++        if (client) client_surface_release(client);
+         return;
+     }
+     {
+@@ -2596,7 +2765,11 @@
+ 
+ static void external_release_win_data(struct external_win_data *external)
+ {
++    struct client_surface *unused;
++
+     if (!external) return;
++    if (external->child_surface && (unused = take_child_surface(external->child_surface, NULL)))
++        client_surface_release(unused);
+     release_win_data(external->data);
+     free(external);
+ }

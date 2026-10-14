@@ -76,6 +76,7 @@ jobs:
       WINEDEBUG: -all
       WINEDLLOVERRIDES: winemenubuilder.exe=d
       PANEL_PIXELS_REQUIRED: 30000
+      WINDOW_PIXELS_REQUIRED: 20000
     steps:
       - uses: actions/checkout@v7
 
@@ -116,11 +117,13 @@ jobs:
           screencapture -x "$RUNNER_TEMP/results/d3d11-present.png"
           wait "$test_pid" || echo "the present test exited with $?"
           cat "$RUNNER_TEMP/results/d3d11-present.log"
-          "$RUNNER_TEMP/count-colors" "$RUNNER_TEMP/results/d3d11-present.png" 00ffff ff00ff | tee "$RUNNER_TEMP/results/colors.txt"
-          same_process=$(awk '$1 == "00ffff" { print $2 }' "$RUNNER_TEMP/results/colors.txt")
-          other_process=$(awk '$1 == "ff00ff" { print $2 }' "$RUNNER_TEMP/results/colors.txt")
-          test "$same_process" -ge "$PANEL_PIXELS_REQUIRED" || { echo "the same-process panel is not drawn"; exit 1; }
-          test "$other_process" -ge "$PANEL_PIXELS_REQUIRED" || { echo "the other-process panel is not drawn"; exit 1; }
+          "$RUNNER_TEMP/count-colors" "$RUNNER_TEMP/results/d3d11-present.png" 00ffff ffff00 ff00ff | tee "$RUNNER_TEMP/results/colors.txt"
+          pixels() { awk -v color="$1" '$1 == color { print $2 }' "$RUNNER_TEMP/results/colors.txt"; }
+          failed=0
+          test "$(pixels 00ffff)" -ge "$WINDOW_PIXELS_REQUIRED" || { echo "the owner's own window is not drawn"; failed=1; }
+          test "$(pixels ffff00)" -ge "$PANEL_PIXELS_REQUIRED" || { echo "the owner's child window is not drawn"; failed=1; }
+          test "$(pixels ff00ff)" -ge "$PANEL_PIXELS_REQUIRED" || { echo "the child window drawn by another process is not drawn"; failed=1; }
+          test "$failed" = 0
           grep -q 'remote process exit code: 0' "$RUNNER_TEMP/results/d3d11-present.log"
 
       - uses: actions/upload-artifact@v7

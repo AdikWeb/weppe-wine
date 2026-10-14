@@ -25,9 +25,12 @@ write_record() {
         echo "dxmt release: $DXMT_RELEASE_URL sha256:$DXMT_RELEASE_SHA256"
         echo "windows toolchain: $LLVM_MINGW_URL sha256:$LLVM_MINGW_SHA256"
         echo "patches:"
-        (cd "$repository_root/patches" && for patch_file in wine/*.patch dxmt/*.patch; do
-            echo "  $patch_file sha256:$(shasum -a 256 "$patch_file" | cut -d ' ' -f 1)"
-        done)
+        for component in wine dxmt; do
+            while read -r name; do
+                patch_file="$repository_root/patches/$component/$name"
+                echo "  $component/$name sha256:$(shasum -a 256 "$patch_file" | cut -d ' ' -f 1)"
+            done < "$repository_root/patches/$component/series"
+        done
     } > "$record_dir/build.txt"
 }
 

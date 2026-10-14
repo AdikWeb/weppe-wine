@@ -28,10 +28,10 @@ unpack_release() {
 prepare_source() {
     rm -rf "$source_dir"
     clone_at "$DXMT_REPOSITORY" "$DXMT_TAG" "$DXMT_COMMIT" "$source_dir"
-    for patch_file in "$patches"/*.patch; do
-        echo "Applying $(basename "$patch_file")"
-        git -C "$source_dir" apply "$patch_file" || fail "$(basename "$patch_file") does not apply to DXMT $DXMT_TAG"
-    done
+    while read -r name; do
+        echo "Applying $name"
+        git -C "$source_dir" apply "$patches/$name" || fail "$name does not apply to DXMT $DXMT_TAG"
+    done < "$patches/series"
 }
 
 build_wine_import_libraries() {

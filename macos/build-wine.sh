@@ -33,10 +33,10 @@ prepare_source() {
     echo "Applying wine-staging $STAGING_TAG"
     python3 "$staging_dir/staging/patchinstall.py" DESTDIR="$source_dir" --all > "$work/staging.log" 2>&1 \
         || fail_with_log "wine-staging did not apply" "$work/staging.log"
-    for patch_file in "$patches"/*.patch; do
-        echo "Applying $(basename "$patch_file")"
-        patch -d "$source_dir" -p1 --forward --quiet < "$patch_file" || fail "$(basename "$patch_file") does not apply"
-    done
+    while read -r name; do
+        echo "Applying $name"
+        patch -d "$source_dir" -p1 --forward --quiet < "$patches/$name" || fail "$name does not apply"
+    done < "$patches/series"
 }
 
 configure_build() {
