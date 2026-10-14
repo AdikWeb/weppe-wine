@@ -148,26 +148,11 @@ jobs:
 
   steam:
     needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - variant: gpu
-            arguments: ""
-            dxmt_config: ""
-          - variant: gpu-feature-level-11-1
-            arguments: ""
-            dxmt_config: d3d11.maxFeatureLevel=11_1
-          - variant: single-process-without-gpu
-            arguments: -cef-single-process -cef-disable-gpu
-            dxmt_config: ""
     runs-on: macos-15
     timeout-minutes: 45
     env:
       WINEDEBUG: -all
       WINEDLLOVERRIDES: winemenubuilder.exe=d
-      STEAM_ARGUMENTS: ${{ matrix.arguments }}
-      DXMT_CONFIG: ${{ matrix.dxmt_config }}
     steps:
       - uses: actions/checkout@v7
 
@@ -197,7 +182,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
-          name: steam-results-${{ matrix.variant }}
+          name: steam-results
           path: |
             ${{ runner.temp }}/results
             !${{ runner.temp }}/results/SteamSetup.exe

@@ -15,6 +15,7 @@ poll_seconds=15
 stall_seconds=180
 max_starts=3
 dark_permille_limit=500
+dark_seconds_limit=300
 shot_tool="$results/window-shot"
 shot_report="$results/window-shot.txt"
 wineserver="$(dirname "$WINE")/wineserver"
@@ -22,11 +23,12 @@ wineserver="$(dirname "$WINE")/wineserver"
 starts=0
 last_progress=""
 last_progress_time=0
+first_dark_time=0
 
 start_steam() {
     starts=$((starts + 1))
-    echo "Starting Steam (attempt $starts) ${STEAM_ARGUMENTS:-without arguments}"
-    "$WINE" "$steam_dir/steam.exe" ${STEAM_ARGUMENTS:-} >> "$results/steam.log" 2>&1 &
+    echo "Starting Steam (attempt $starts)"
+    "$WINE" "$steam_dir/steam.exe" >> "$results/steam.log" 2>&1 &
     last_progress_time=$(date +%s)
 }
 
@@ -42,7 +44,9 @@ progress_marker() {
     ls -lT "$steam_dir/logs" 2> /dev/null | cksum
 }
 
-mkdir -p "$results"
+mkdir -p "$results/dxmt"
+DXMT_LOG_PATH="Z:$results/dxmt"
+export DXMT_LOG_PATH
 swiftc -O "$here/../tools/window-shot.swift" -o "$shot_tool"
 curl -sSfL --retry 3 -o "$results/SteamSetup.exe" "$steam_setup_url"
 echo "Installing Steam"
@@ -64,6 +68,11 @@ while :; do
         fi
         echo "Steam's sign-in window is dark ($dark permille) after ${elapsed}s"
         last_progress_time=$now
+        [ "$first_dark_time" -gt 0 ] || first_dark_time=$now
+        if [ $((now - first_dark_time)) -ge "$dark_seconds_limit" ]; then
+            cat "$shot_report"
+            fail "Steam's sign-in window stayed dark for ${dark_seconds_limit}s"
+        fi
     else
         echo "no sign-in window after ${elapsed}s; bootstrap: $(tail -n 1 "$steam_dir/logs/bootstrap_log.txt" 2> /dev/null || true)"
         progress=$(progress_marker)
