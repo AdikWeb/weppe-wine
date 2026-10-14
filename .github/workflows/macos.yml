@@ -115,6 +115,12 @@ jobs:
           "$WINE" "$RUNNER_TEMP/tests/d3d11-triangle.exe" 2>&1 | tee "$RUNNER_TEMP/results/d3d11-triangle.log"
           grep -q 'd3d11 triangle: ok' "$RUNNER_TEMP/results/d3d11-triangle.log"
 
+      - name: Share a texture between two devices, as Chromium's GPU process does
+        continue-on-error: true
+        run: |
+          "$WINE" "$RUNNER_TEMP/tests/d3d11-shared-texture.exe" 2>&1 | tee "$RUNNER_TEMP/results/d3d11-shared-texture.log"
+          grep -q 'd3d11 shared texture: ok' "$RUNNER_TEMP/results/d3d11-shared-texture.log"
+
       - name: Present from another process into a child window
         run: |
           swiftc -O tools/count-colors.swift -o "$RUNNER_TEMP/count-colors"
