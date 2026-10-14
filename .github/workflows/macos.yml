@@ -1,0 +1,74 @@
+name: macOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['[0-9]*']
+    paths:
+      - .github/workflows/macos.yml
+      - macos/**
+      - patches/**
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install build tools
+        run: |
+          brew install --quiet bison flex autoconf meson ninja
+          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix flex)/bin" >> "$GITHUB_PATH"
+
+      - name: Build Wine
+        run: macos/build-wine.sh "$RUNNER_TEMP/work" "$RUNNER_TEMP/bundle/Wine Staging.app"
+
+      - name: Build DXMT
+        run: macos/build-dxmt.sh "$RUNNER_TEMP/work" "$RUNNER_TEMP/work/wine-build" "$RUNNER_TEMP/bundle/Wine Staging.app"
+
+      - name: Package
+        run: macos/package.sh "$RUNNER_TEMP/bundle/Wine Staging.app" "$RUNNER_TEMP/dist"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: weppe-wine-macos
+          path: ${{ runner.temp }}/dist
+          compression-level: 0
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: build-logs
+          path: |
+            ${{ runner.temp }}/work/*.log
+          if-no-files-found: ignore
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: weppe-wine-macos
+          path: dist
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tar -xJOf dist/*.tar.xz --wildcards '*/Contents/Resources/weppe-wine/build.txt' > notes.txt
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes-file notes.txt
