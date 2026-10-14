@@ -1,0 +1,69 @@
+name: Metal probe
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/metal-probe.yml
+      - tools/metal-probe.swift
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  KOSMICKRISP_URL: https://github.com/Gcenx/mesa-kosmickrisp/releases/download/20261001/kosmickrisp-arm64.zip
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-26]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Describe the machine
+        run: |
+          sw_vers
+          sysctl -n machdep.cpu.brand_string
+          system_profiler SPDisplaysDataType
+
+      - name: Build the Metal probe
+        run: swiftc -O -target "$(uname -m)-apple-macos14" tools/metal-probe.swift -o "$RUNNER_TEMP/metal-probe"
+
+      - name: Render with Metal offscreen and in a window
+        run: |
+          mkdir -p "$RUNNER_TEMP/captures"
+          "$RUNNER_TEMP/metal-probe" "$RUNNER_TEMP/captures/metal-window.png"
+
+      - name: Install the Vulkan loader, tools and MoltenVK
+        if: ${{ !cancelled() }}
+        run: brew install --quiet vulkan-loader vulkan-tools molten-vk
+
+      - name: Run Vulkan on MoltenVK
+        if: ${{ !cancelled() }}
+        run: |
+          icd=$(find "$(brew --prefix molten-vk)/" -name MoltenVK_icd.json | head -n 1)
+          test -n "$icd"
+          export VK_DRIVER_FILES="$icd" VK_ICD_FILENAMES="$icd"
+          vulkaninfo --summary
+          if command -v vkcube >/dev/null; then vkcube --c 200; else echo "vkcube is not installed"; fi
+
+      - name: Run Vulkan on KosmicKrisp
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/kosmickrisp"
+          curl -sSfL -o "$RUNNER_TEMP/kosmickrisp.zip" "$KOSMICKRISP_URL"
+          unzip -q "$RUNNER_TEMP/kosmickrisp.zip" -d "$RUNNER_TEMP/kosmickrisp"
+          icd="$RUNNER_TEMP/kosmickrisp/kosmickrisp_mesa_icd.json"
+          export VK_DRIVER_FILES="$icd" VK_ICD_FILENAMES="$icd"
+          vulkaninfo --summary
+          if command -v vkcube >/dev/null; then vkcube --c 200; else echo "vkcube is not installed"; fi
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: metal-probe-${{ matrix.runner }}
+          path: ${{ runner.temp }}/captures
+          if-no-files-found: ignore
