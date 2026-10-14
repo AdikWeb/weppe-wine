@@ -1,0 +1,96 @@
+From ed9ceb7c0c6b14d5a375b678f589b460621d96ef Mon Sep 17 00:00:00 2001
+From: Feifan He <feifan@codeweavers.com>
+Date: Tue, 28 Apr 2026 14:06:10 +0800
+Subject: [PATCH] feat(d3d11): introduce `d3d11.maxFeatureLevel` option
+
+Signed-off-by: Feifan He <feifan@codeweavers.com>
+---
+ dxmt.conf                  |  6 ++++++
+ src/d3d11/d3d11.cpp        | 37 +++++++++++++++++++++++++++++++++++++
+ src/util/config/config.cpp |  4 ++++
+ 3 files changed, 47 insertions(+)
+
+diff --git a/dxmt.conf b/dxmt.conf
+index 41a8f0f24..7a4da507b 100644
+--- a/dxmt.conf
++++ b/dxmt.conf
+@@ -91,3 +91,9 @@
+ #
+ 
+ # d3d11.defuseFma = False
++
++# Override the maximum feature level of created d3d11 device.
++#
++# Supported values: 9_1, 9_2, 9_3, 10_0, 10_1, 11_0, 11_1, 12_0, 12_1
++
++# d3d11.maxFeatureLevel = 12_1
+diff --git a/src/d3d11/d3d11.cpp b/src/d3d11/d3d11.cpp
+index 0550862b5..c20449c7b 100644
+--- a/src/d3d11/d3d11.cpp
++++ b/src/d3d11/d3d11.cpp
+@@ -1,6 +1,25 @@
++/*
++ * Copyright 2026 Feifan He for CodeWeavers
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
++ */
++
+ #include "dxmt_names.hpp"
+ #include "com/com_object.hpp"
+ #include "com/com_pointer.hpp"
++#include "config/config.hpp"
+ #include "d3d11_device.hpp"
+ #include "log/log.hpp"
+ #include "util_string.hpp"
+@@ -41,6 +60,24 @@ D3D11CoreCreateDevice(IDXGIFactory *pFactory, IDXGIAdapter *pAdapter,
+   D3D_FEATURE_LEVEL minFeatureLevel = D3D_FEATURE_LEVEL();
+   D3D_FEATURE_LEVEL devFeatureLevel = D3D_FEATURE_LEVEL();
+ 
++  if (auto fl_override = Config::getInstance().getOption<std::string>("d3d11.maxFeatureLevel", "");
++      fl_override != "") {
++    static const std::unordered_map<std::string, D3D_FEATURE_LEVEL> s_feature_levels = {{
++        {"12_1", D3D_FEATURE_LEVEL_12_1},
++        {"12_0", D3D_FEATURE_LEVEL_12_0},
++        {"11_1", D3D_FEATURE_LEVEL_11_1},
++        {"11_0", D3D_FEATURE_LEVEL_11_0},
++        {"10_1", D3D_FEATURE_LEVEL_10_1},
++        {"10_0", D3D_FEATURE_LEVEL_10_0},
++        {"9_3", D3D_FEATURE_LEVEL_9_3},
++        {"9_2", D3D_FEATURE_LEVEL_9_2},
++        {"9_1", D3D_FEATURE_LEVEL_9_1},
++    }};
++    if (auto iter = s_feature_levels.find(fl_override); iter != s_feature_levels.end()) {
++      maxFeatureLevel = iter->second;
++    }
++  }
++
+   Logger::info(
+       str::format("Maximum supported feature level: ", maxFeatureLevel));
+ 
+diff --git a/src/util/config/config.cpp b/src/util/config/config.cpp
+index de8d775fc..36cc140cf 100644
+--- a/src/util/config/config.cpp
++++ b/src/util/config/config.cpp
+@@ -60,6 +60,10 @@ namespace dxmt {
+     { R"(\\SotTR\.exe$)", {{
+       { "d3d11.defuseFma",   "True" },
+     }} },
++    /** Helldivers 2 */
++    { R"(\\helldivers2\.exe$)", {{
++      { "d3d11.maxFeatureLevel",   "12_1" },
++    }} },
+   }};
+ 
+   const Config* findProfile(const ProfileList& profiles, const std::string& appName) {
