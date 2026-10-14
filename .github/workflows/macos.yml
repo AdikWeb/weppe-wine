@@ -9,6 +9,8 @@ on:
       - .github/workflows/macos.yml
       - macos/**
       - patches/**
+      - tests/**
+      - tools/count-colors.swift
 
 concurrency:
   group: macos-${{ github.ref }}
@@ -40,11 +42,23 @@ jobs:
       - name: Package
         run: macos/package.sh "$RUNNER_TEMP/bundle/Wine Staging.app" "$RUNNER_TEMP/dist"
 
+      - name: Build the test programs
+        run: |
+          compiler="$RUNNER_TEMP/work/llvm-mingw/bin/x86_64-w64-mingw32-clang"
+          mkdir -p "$RUNNER_TEMP/tests"
+          "$compiler" -O2 -Wall tests/d3d11-triangle.c -ld3d11 -ld3dcompiler_47 -ldxgi -luuid -o "$RUNNER_TEMP/tests/d3d11-triangle.exe"
+          "$compiler" -O2 -Wall tests/d3d11-present.c -ld3d11 -ldxgi -lgdi32 -luser32 -luuid -o "$RUNNER_TEMP/tests/d3d11-present.exe"
+
       - uses: actions/upload-artifact@v7
         with:
           name: weppe-wine-macos
           path: ${{ runner.temp }}/dist
           compression-level: 0
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: weppe-wine-tests
+          path: ${{ runner.temp }}/tests
 
       - uses: actions/upload-artifact@v7
         if: failure()
@@ -54,9 +68,114 @@ jobs:
             ${{ runner.temp }}/work/*.log
           if-no-files-found: ignore
 
+  test:
+    needs: build
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      WINEDEBUG: -all
+      WINEDLLOVERRIDES: winemenubuilder.exe=d
+      PANEL_PIXELS_REQUIRED: 30000
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: weppe-wine-macos
+          path: ${{ runner.temp }}/dist
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: weppe-wine-tests
+          path: ${{ runner.temp }}/tests
+
+      - name: Unpack the build
+        run: |
+          macos/unpack-build.sh "$RUNNER_TEMP/dist" "$RUNNER_TEMP/runner"
+          echo "WINE=$RUNNER_TEMP/runner/Contents/Resources/wine/bin/wine" >> "$GITHUB_ENV"
+          echo "WINEPREFIX=$RUNNER_TEMP/prefix" >> "$GITHUB_ENV"
+
+      - name: Create a prefix
+        run: |
+          "$WINE" --version
+          "$WINE" wineboot -u
+          "$(dirname "$WINE")/wineserver" -w
+
+      - name: Draw a triangle with Direct3D 11
+        run: |
+          mkdir -p "$RUNNER_TEMP/results"
+          "$WINE" "$RUNNER_TEMP/tests/d3d11-triangle.exe" 2>&1 | tee "$RUNNER_TEMP/results/d3d11-triangle.log"
+          grep -q 'd3d11 triangle: ok' "$RUNNER_TEMP/results/d3d11-triangle.log"
+
+      - name: Present from another process into a child window
+        run: |
+          swiftc -O tools/count-colors.swift -o "$RUNNER_TEMP/count-colors"
+          "$WINE" "$RUNNER_TEMP/tests/d3d11-present.exe" > "$RUNNER_TEMP/results/d3d11-present.log" 2>&1 &
+          test_pid=$!
+          sleep 15
+          screencapture -x "$RUNNER_TEMP/results/d3d11-present.png"
+          wait "$test_pid" || echo "the present test exited with $?"
+          cat "$RUNNER_TEMP/results/d3d11-present.log"
+          "$RUNNER_TEMP/count-colors" "$RUNNER_TEMP/results/d3d11-present.png" 00ffff ff00ff | tee "$RUNNER_TEMP/results/colors.txt"
+          same_process=$(awk '$1 == "00ffff" { print $2 }' "$RUNNER_TEMP/results/colors.txt")
+          other_process=$(awk '$1 == "ff00ff" { print $2 }' "$RUNNER_TEMP/results/colors.txt")
+          test "$same_process" -ge "$PANEL_PIXELS_REQUIRED" || { echo "the same-process panel is not drawn"; exit 1; }
+          test "$other_process" -ge "$PANEL_PIXELS_REQUIRED" || { echo "the other-process panel is not drawn"; exit 1; }
+          grep -q 'remote process exit code: 0' "$RUNNER_TEMP/results/d3d11-present.log"
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: test-results
+          path: ${{ runner.temp }}/results
+          if-no-files-found: ignore
+
+  steam:
+    needs: build
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      WINEDEBUG: -all
+      WINEDLLOVERRIDES: winemenubuilder.exe=d
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: weppe-wine-macos
+          path: ${{ runner.temp }}/dist
+
+      - name: Unpack the build
+        run: |
+          macos/unpack-build.sh "$RUNNER_TEMP/dist" "$RUNNER_TEMP/runner"
+          echo "WINE=$RUNNER_TEMP/runner/Contents/Resources/wine/bin/wine" >> "$GITHUB_ENV"
+          echo "WINEPREFIX=$RUNNER_TEMP/prefix" >> "$GITHUB_ENV"
+
+      - name: Create a prefix
+        run: |
+          "$WINE" wineboot -u
+          "$(dirname "$WINE")/wineserver" -w
+
+      - name: Draw Steam's sign-in window
+        run: macos/test-steam.sh "$RUNNER_TEMP/results"
+
+      - name: Collect Steam's logs
+        if: ${{ !cancelled() }}
+        run: cp -R "$WINEPREFIX/drive_c/Program Files (x86)/Steam/logs" "$RUNNER_TEMP/results/steam-logs" || true
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: steam-results
+          path: |
+            ${{ runner.temp }}/results
+            !${{ runner.temp }}/results/SteamSetup.exe
+            !${{ runner.temp }}/results/window-shot
+          if-no-files-found: ignore
+
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    needs: [build, test]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

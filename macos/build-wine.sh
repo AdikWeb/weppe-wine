@@ -76,6 +76,7 @@ build() {
 
 graft() {
     rm -rf "$bundle"
+    mkdir -p "$(dirname "$bundle")"
     cp -R "$base_dir/$BASE_BUNDLE" "$bundle"
     lib="$bundle/$BUNDLE_WINE_DIR/lib/wine"
     replace_file "$build_dir/dlls/winemac.drv/winemac.so" "$lib/x86_64-unix/winemac.so"
