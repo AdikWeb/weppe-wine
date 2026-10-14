@@ -3,3 +3,4 @@ cross-process-swapchain.patch
 destroyed-object-release.patch
 frame-dump.patch
 timestamp-after-event.patch
+shareable-color-formats.patch

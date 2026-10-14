@@ -87,6 +87,17 @@ static BOOL share_with_global_handle(ID3D11Device *creator, ID3D11Device *opener
     return SUCCEEDED(hr) && opened;
 }
 
+static BOOL reports_shareable(ID3D11Device *device, DXGI_FORMAT format, const char *name)
+{
+    D3D11_FEATURE_DATA_FORMAT_SUPPORT2 support = {format, 0};
+    HRESULT hr = ID3D11Device_CheckFeatureSupport(device, D3D11_FEATURE_FORMAT_SUPPORT2, &support, sizeof(support));
+    BOOL shareable = SUCCEEDED(hr) && (support.OutFormatSupport2 & D3D11_FORMAT_SUPPORT2_SHAREABLE);
+
+    printf("%s FORMAT_SUPPORT2: hr %#lx flags %#x shareable %d\n", name, (unsigned long)hr, support.OutFormatSupport2,
+           shareable);
+    return shareable;
+}
+
 int main(void)
 {
     ID3D11Device *creator, *opener;
@@ -94,6 +105,12 @@ int main(void)
 
     setvbuf(stdout, NULL, _IONBF, 0);
     if (!(creator = create_device()) || !(opener = create_device())) return 1;
+    if (!reports_shareable(creator, DXGI_FORMAT_B8G8R8A8_UNORM, "B8G8R8A8_UNORM") ||
+        !reports_shareable(creator, DXGI_FORMAT_R8G8B8A8_UNORM, "R8G8B8A8_UNORM"))
+    {
+        printf("FAIL: shareable color formats are not reported as shareable\n");
+        failed = 1;
+    }
     if (!share_with_nt_handle(creator, opener, D3D11_RESOURCE_MISC_SHARED_NTHANDLE | D3D11_RESOURCE_MISC_SHARED))
     {
         printf("FAIL: NT handle sharing\n");

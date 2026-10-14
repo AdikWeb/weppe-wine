@@ -1,0 +1,25 @@
+Report D3D11_FORMAT_SUPPORT2_SHAREABLE for color formats.
+
+DXMT shares textures of any color format through D3DKMT allocations, but
+CheckFeatureSupport(D3D11_FEATURE_FORMAT_SUPPORT2) reported SHAREABLE only for
+formats with atomics, so BGRA8 and RGBA8 looked unshareable to callers that ask
+first. DXVK reports it for every exportable color format.
+
+diff --git a/src/d3d11/d3d11_device.cpp b/src/d3d11/d3d11_device.cpp
+index 6a8caca..4127fdf 100644
+--- a/src/d3d11/d3d11_device.cpp
++++ b/src/d3d11/d3d11_device.cpp
+@@ -643,8 +643,11 @@ public:
+             D3D11_FORMAT_SUPPORT2_UAV_ATOMIC_COMPARE_STORE_OR_COMPARE_EXCHANGE |
+             D3D11_FORMAT_SUPPORT2_UAV_ATOMIC_EXCHANGE |
+             D3D11_FORMAT_SUPPORT2_UAV_ATOMIC_SIGNED_MIN_OR_MAX |
+-            D3D11_FORMAT_SUPPORT2_UAV_ATOMIC_UNSIGNED_MIN_OR_MAX |
+-            D3D11_FORMAT_SUPPORT2_SHAREABLE;
++            D3D11_FORMAT_SUPPORT2_UAV_ATOMIC_UNSIGNED_MIN_OR_MAX;
++      }
++
++      if (any_bit_set(Capability & FormatCapability::Color)) {
++        info->OutFormatSupport2 |= D3D11_FORMAT_SUPPORT2_SHAREABLE;
+       }
+ 
+ #ifndef DXMT_NO_PRIVATE_API
