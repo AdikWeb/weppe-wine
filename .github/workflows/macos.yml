@@ -151,8 +151,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 45
     env:
-      WINEDEBUG: -all
+      WINEDEBUG: fixme-all
       WINEDLLOVERRIDES: winemenubuilder.exe=d
+      DXMT_LOG_LEVEL: debug
     steps:
       - uses: actions/checkout@v7
 

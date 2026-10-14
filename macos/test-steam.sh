@@ -44,9 +44,7 @@ progress_marker() {
     ls -lT "$steam_dir/logs" 2> /dev/null | cksum
 }
 
-mkdir -p "$results/dxmt"
-DXMT_LOG_PATH="Z:$results/dxmt"
-export DXMT_LOG_PATH
+mkdir -p "$results"
 swiftc -O "$here/../tools/window-shot.swift" -o "$shot_tool"
 curl -sSfL --retry 3 -o "$results/SteamSetup.exe" "$steam_setup_url"
 echo "Installing Steam"
