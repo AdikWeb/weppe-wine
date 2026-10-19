@@ -11,3 +11,4 @@ here=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$work" "$output"
 use_llvm_mingw "$work"
 build_test_for_both_architectures "$here/../tests/propvariant-filetime.c" "$output"
+build_test_for_both_architectures "$here/../tests/cloud-files-platform-info.c" "$output"

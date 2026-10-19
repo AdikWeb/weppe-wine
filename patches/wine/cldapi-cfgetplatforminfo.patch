@@ -1,0 +1,53 @@
+Backport of upstream Wine commit 505f126cc327 (cldapi: Add stub for CfGetPlatformInfo).
+
+DingTalk's MainFrame.dll asks CfGetPlatformInfo whether Cloud Files are supported
+after sign-in; the 11.19 stub aborted the process, the backported one answers
+E_NOTIMPL, which DingTalk takes as "not supported".
+
+diff --git a/dlls/cldapi/cldapi.spec b/dlls/cldapi/cldapi.spec
+index 93e3d984b44..4cbb07b846c 100644
+--- a/dlls/cldapi/cldapi.spec
++++ b/dlls/cldapi/cldapi.spec
+@@ -17,7 +17,7 @@
+ @ stub CfGetPlaceholderStateFromAttributeTag
+ @ stub CfGetPlaceholderStateFromFileInfo
+ @ stub CfGetPlaceholderStateFromFindData
+-@ stub CfGetPlatformInfo
++@ stdcall CfGetPlatformInfo(ptr)
+ @ stub CfGetSyncRootInfoByHandle
+ @ stub CfGetSyncRootInfoByPath
+ @ stub CfGetTransferKey
+diff --git a/dlls/cldapi/main.c b/dlls/cldapi/main.c
+index f35284c94f7..751a95d9b68 100644
+--- a/dlls/cldapi/main.c
++++ b/dlls/cldapi/main.c
+@@ -28,3 +28,10 @@ HRESULT WINAPI CfGetPlaceholderInfo(HANDLE h, CF_PLACEHOLDER_INFO_CLASS info, vo
+ 
+     return E_NOTIMPL;
+ }
++
++HRESULT WINAPI CfGetPlatformInfo(CF_PLATFORM_INFO *info)
++{
++    FIXME("%p\n", info);
++
++    return E_NOTIMPL;
++}
+diff --git a/include/cfapi.h b/include/cfapi.h
+index 968acc4ac7c..a5966154d81 100644
+--- a/include/cfapi.h
++++ b/include/cfapi.h
+@@ -25,6 +25,14 @@ typedef enum CF_PLACEHOLDER_INFO_CLASS
+   CF_PLACEHOLDER_INFO_STANDARD = 1
+ } CF_PLACEHOLDER_INFO_CLASS;
+ 
++typedef struct CF_PLATFORM_INFO
++{
++  DWORD BuildNumber;
++  DWORD RevisionNumber;
++  DWORD IntegrationNumber;
++} CF_PLATFORM_INFO;
++
+ HRESULT WINAPI CfGetPlaceholderInfo(HANDLE h, CF_PLACEHOLDER_INFO_CLASS info, void *buf, DWORD len, DWORD *retlen);
++HRESULT WINAPI CfGetPlatformInfo(CF_PLATFORM_INFO *info);
+ 
+ #endif  /* CFAPI_H */

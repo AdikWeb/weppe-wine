@@ -13,7 +13,7 @@ source_dir="$work/wine-$WINE_VERSION"
 staging_dir="$work/wine-staging"
 build_dir="$work/wine-build"
 base_dir="$work/base"
-pe_dlls="bcrypt d3dx9_* mfreadwrite propsys xactengine* xaudio2_*"
+pe_dlls="bcrypt cldapi d3dx9_* mfreadwrite propsys xactengine* xaudio2_*"
 
 unpack_base_build() {
     archive="$work/base.tar.xz"

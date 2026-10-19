@@ -13,7 +13,7 @@ source_dir="$work/wine-$WINE_VERSION"
 staging_dir="$work/wine-staging"
 build_dir="$work/wine-build"
 base_dir="$work/base"
-pe_dlls="propsys"
+pe_dlls="cldapi propsys"
 architectures="i386 x86_64"
 
 unpack_base_build() {

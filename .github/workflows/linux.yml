@@ -11,6 +11,7 @@ on:
       - linux/**
       - patches/wine/**
       - tests/propvariant-filetime.c
+      - tests/cloud-files-platform-info.c
 
 concurrency:
   group: linux-${{ github.ref }}
@@ -103,6 +104,13 @@ jobs:
           for target in i686 x86_64; do
             "$WINE" "$RUNNER_TEMP/tests/propvariant-filetime-$target.exe" | tee "$RUNNER_TEMP/propvariant-$target.log"
             grep -q 'propvariant filetime: ok' "$RUNNER_TEMP/propvariant-$target.log"
+          done
+
+      - name: Ask for the Cloud Files platform version from 32-bit and 64-bit programs, as DingTalk does
+        run: |
+          for target in i686 x86_64; do
+            "$WINE" "$RUNNER_TEMP/tests/cloud-files-platform-info-$target.exe" | tee "$RUNNER_TEMP/cloud-files-$target.log"
+            grep -q 'cloud files platform info: ok' "$RUNNER_TEMP/cloud-files-$target.log"
           done
 
   release:
