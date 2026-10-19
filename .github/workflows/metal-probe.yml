@@ -3,6 +3,7 @@ name: Metal probe
 on:
   workflow_dispatch:
   push:
+    branches: ['**']
     paths:
       - .github/workflows/metal-probe.yml
       - tools/metal-probe.swift
