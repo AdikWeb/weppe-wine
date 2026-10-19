@@ -4,7 +4,7 @@ set -eu
 usage="usage: test-steam.sh <results-dir>"
 results=${1:?$usage}
 here=$(cd "$(dirname "$0")" && pwd)
-. "$here/common.sh"
+. "$here/../common.sh"
 : "${WINE:?WINE must name the wine binary}" "${WINEPREFIX:?WINEPREFIX must be set}"
 
 steam_setup_url=https://cdn.fastly.steamstatic.com/client/installer/SteamSetup.exe

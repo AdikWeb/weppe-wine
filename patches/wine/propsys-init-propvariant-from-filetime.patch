@@ -1,0 +1,38 @@
+Implement InitPropVariantFromFileTime.
+
+DingTalk's installer imports it from propsys and calls it while unpacking; the
+stub aborted the installer with "unimplemented function".
+
+diff --git a/dlls/propsys/propsys.spec b/dlls/propsys/propsys.spec
+index 2824545..4038468 100644
+--- a/dlls/propsys/propsys.spec
++++ b/dlls/propsys/propsys.spec
+@@ -31,7 +31,7 @@
+ @ stdcall InitPropVariantFromBuffer(ptr long ptr)
+ @ stdcall InitPropVariantFromCLSID(ptr ptr)
+ @ stub InitPropVariantFromDoubleVector
+-@ stub InitPropVariantFromFileTime
++@ stdcall InitPropVariantFromFileTime(ptr ptr)
+ @ stub InitPropVariantFromFileTimeVector
+ @ stdcall InitPropVariantFromGUIDAsString(ptr ptr)
+ @ stub InitPropVariantFromInt16Vector
+diff --git a/dlls/propsys/propvar.c b/dlls/propsys/propvar.c
+index e8f77fe..46def64 100644
+--- a/dlls/propsys/propvar.c
++++ b/dlls/propsys/propvar.c
+@@ -901,6 +901,15 @@ HRESULT WINAPI InitVariantFromBuffer(const VOID *pv, UINT cb, VARIANT *pvar)
+     return S_OK;
+ }
+ 
++HRESULT WINAPI InitPropVariantFromFileTime(const FILETIME *ft, PROPVARIANT *ppropvar)
++{
++    TRACE("%p, %p\n", ft, ppropvar);
++
++    ppropvar->vt = VT_FILETIME;
++    ppropvar->filetime = *ft;
++    return S_OK;
++}
++
+ HRESULT WINAPI InitVariantFromFileTime(const FILETIME *ft, VARIANT *var)
+ {
+     SYSTEMTIME st;

@@ -6,7 +6,7 @@ dist=${1:?$usage}
 runner=${2:?$usage}
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/versions.sh"
-. "$here/common.sh"
+. "$here/../common.sh"
 
 rm -rf "$runner"
 mkdir -p "$runner"

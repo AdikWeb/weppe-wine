@@ -6,14 +6,14 @@ work=${1:?$usage}
 bundle=${2:?$usage}
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/versions.sh"
-. "$here/common.sh"
+. "$here/../common.sh"
 
-patches="$here/../patches/wine"
+series="$here/../patches/wine/macos.series"
 source_dir="$work/wine-$WINE_VERSION"
 staging_dir="$work/wine-staging"
 build_dir="$work/wine-build"
 base_dir="$work/base"
-pe_dlls="bcrypt d3dx9_* mfreadwrite xactengine* xaudio2_*"
+pe_dlls="bcrypt d3dx9_* mfreadwrite propsys xactengine* xaudio2_*"
 
 unpack_base_build() {
     archive="$work/base.tar.xz"
@@ -22,21 +22,6 @@ unpack_base_build() {
     mkdir -p "$base_dir"
     tar -xJf "$archive" -C "$base_dir"
     [ -x "$base_dir/$BASE_BUNDLE/$BUNDLE_WINE_DIR/bin/wine" ] || fail "the base build has no $BASE_BUNDLE/$BUNDLE_WINE_DIR/bin/wine"
-}
-
-prepare_source() {
-    archive="$work/wine-$WINE_VERSION.tar.xz"
-    fetch "$WINE_SOURCE_URL" "$WINE_SOURCE_SHA256" "$archive"
-    rm -rf "$source_dir" "$staging_dir"
-    tar -xJf "$archive" -C "$work"
-    clone_at "$STAGING_REPOSITORY" "$STAGING_TAG" "$STAGING_COMMIT" "$staging_dir"
-    echo "Applying wine-staging $STAGING_TAG"
-    python3 "$staging_dir/staging/patchinstall.py" DESTDIR="$source_dir" --all > "$work/staging.log" 2>&1 \
-        || fail_with_log "wine-staging did not apply" "$work/staging.log"
-    while read -r name; do
-        echo "Applying $name"
-        patch -d "$source_dir" -p1 --forward --quiet < "$patches/$name" || fail "$name does not apply"
-    done < "$patches/series"
 }
 
 configure_build() {
@@ -90,7 +75,7 @@ graft() {
 mkdir -p "$work"
 use_llvm_mingw "$work"
 unpack_base_build
-prepare_source
+prepare_wine_source "$work" "$source_dir" "$staging_dir" "$series"
 configure_build
 build
 graft

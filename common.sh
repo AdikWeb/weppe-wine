@@ -1,5 +1,4 @@
-HOST_CLANG=/usr/bin/clang
-HOST_CLANGXX=/usr/bin/clang++
+WINDOWS_TARGETS="i686 x86_64"
 BUILTIN_MARKER="Wine builtin DLL"
 BUILTIN_MARKER_OFFSET=64
 PE_HEADER_POINTER_OFFSET=60
@@ -27,7 +26,7 @@ fetch() {
 
 clone_at() {
     repository=$1 tag=$2 commit=$3 dir=$4
-    git clone -q --depth 1 --branch "$tag" --recurse-submodules --shallow-submodules "$repository" "$dir"
+    git -c advice.detachedHead=false clone -q --depth 1 --branch "$tag" --recurse-submodules --shallow-submodules "$repository" "$dir"
     [ "$(git -C "$dir" rev-parse HEAD)" = "$commit" ] || fail "$repository $tag is not commit $commit"
 }
 
@@ -58,4 +57,40 @@ install_builtin_dll() {
     [ -f "$destination" ] || fail "$destination is not in the base build"
     "$LLVM_MINGW/bin/llvm-strip" -o "$destination" "$built"
     mark_builtin "$destination"
+}
+
+prepare_wine_source() {
+    download_dir=$1 wine_source=$2 staging_source=$3 series_file=$4
+    archive="$download_dir/wine-$WINE_VERSION.tar.xz"
+    fetch "$WINE_SOURCE_URL" "$WINE_SOURCE_SHA256" "$archive"
+    rm -rf "$wine_source" "$staging_source"
+    tar -xJf "$archive" -C "$download_dir"
+    clone_at "$STAGING_REPOSITORY" "$STAGING_TAG" "$STAGING_COMMIT" "$staging_source"
+    echo "Applying wine-staging $STAGING_TAG"
+    python3 "$staging_source/staging/patchinstall.py" DESTDIR="$wine_source" --all > "$download_dir/staging.log" 2>&1 \
+        || fail_with_log "wine-staging did not apply" "$download_dir/staging.log"
+    patch_dir=$(dirname "$series_file")
+    while read -r name; do
+        echo "Applying $name"
+        patch -d "$wine_source" -p1 --forward --quiet < "$patch_dir/$name" || fail "$name does not apply"
+    done < "$series_file"
+}
+
+build_test_for_both_architectures() {
+    test_source=$1 test_output=$2
+    test_name=$(basename "$test_source" .c)
+    for target in $WINDOWS_TARGETS; do
+        "$LLVM_MINGW/bin/$target-w64-mingw32-clang" -O2 -Wall "$test_source" -o "$test_output/$test_name-$target.exe"
+    done
+}
+
+list_patches() {
+    patch_root=$1
+    shift
+    for series in "$@"; do
+        component=${series%%/*}
+        while read -r name; do
+            echo "  $component/$name sha256:$(shasum -a 256 "$patch_root/$component/$name" | cut -d ' ' -f 1)"
+        done < "$patch_root/$series"
+    done
 }

@@ -1,0 +1,125 @@
+name: Linux
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['*-linux']
+    paths:
+      - .github/workflows/linux.yml
+      - common.sh
+      - linux/**
+      - patches/wine/**
+      - tests/propvariant-filetime.c
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Reuse a build of the same sources
+        id: cached-build
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/dist
+          key: linux-build-${{ hashFiles('common.sh', 'linux/versions.sh', 'linux/build-wine.sh', 'linux/package.sh', 'patches/wine/**', 'LICENSE') }}
+
+      - name: Install build tools
+        if: steps.cached-build.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends flex bison autoconf
+
+      - name: Build Wine
+        if: steps.cached-build.outputs.cache-hit != 'true'
+        run: linux/build-wine.sh "$RUNNER_TEMP/work" "$RUNNER_TEMP/wine"
+
+      - name: Package
+        if: steps.cached-build.outputs.cache-hit != 'true'
+        run: linux/package.sh "$RUNNER_TEMP/wine" "$RUNNER_TEMP/dist"
+
+      - name: Build the test programs
+        run: linux/build-tests.sh "$RUNNER_TEMP/work" "$RUNNER_TEMP/tests"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: weppe-wine-linux
+          path: ${{ runner.temp }}/dist
+          compression-level: 0
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: weppe-wine-linux-tests
+          path: ${{ runner.temp }}/tests
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: build-logs
+          path: |
+            ${{ runner.temp }}/work/*.log
+          if-no-files-found: ignore
+
+  test:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      WINEDEBUG: -all
+      WINEDLLOVERRIDES: winemenubuilder.exe=d
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: weppe-wine-linux
+          path: ${{ runner.temp }}/dist
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: weppe-wine-linux-tests
+          path: ${{ runner.temp }}/tests
+
+      - name: Unpack the build
+        run: |
+          linux/unpack-build.sh "$RUNNER_TEMP/dist" "$RUNNER_TEMP/runner"
+          echo "WINE=$RUNNER_TEMP/runner/bin/wine" >> "$GITHUB_ENV"
+          echo "WINEPREFIX=$RUNNER_TEMP/prefix" >> "$GITHUB_ENV"
+
+      - name: Create a prefix
+        run: |
+          "$WINE" --version
+          "$WINE" wineboot -u
+          "$(dirname "$WINE")/wineserver" -w
+
+      - name: Call InitPropVariantFromFileTime from 32-bit and 64-bit programs
+        run: |
+          for target in i686 x86_64; do
+            "$WINE" "$RUNNER_TEMP/tests/propvariant-filetime-$target.exe" | tee "$RUNNER_TEMP/propvariant-$target.log"
+            grep -q 'propvariant filetime: ok' "$RUNNER_TEMP/propvariant-$target.log"
+          done
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build, test]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: weppe-wine-linux
+          path: dist
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tar -xJOf dist/*.tar.xz --wildcards '*/weppe-wine/build.txt' > notes.txt
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes-file notes.txt

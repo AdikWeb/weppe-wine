@@ -22,5 +22,8 @@ DXMT_RELEASE_SHA256=8f260e36b5739e68f3bad613381441385c4dc7b85b78ba8de653d5a6a264
 RELEASE_NAME="weppe-wine-$WINE_VERSION-$BUILD_REVISION-osx64"
 MACOSX_DEPLOYMENT_TARGET=10.15
 
+HOST_CLANG=/usr/bin/clang
+HOST_CLANGXX=/usr/bin/clang++
+
 LLVM_MINGW_URL=https://github.com/mstorsjo/llvm-mingw/releases/download/20251216/llvm-mingw-20251216-ucrt-macos-universal.tar.xz
 LLVM_MINGW_SHA256=38bb5e48ec3e0ce95fb901f4efff0bd6ffa966d1b32539a6510af816a959d160

@@ -6,7 +6,7 @@ bundle=${1:?$usage}
 output=${2:?$usage}
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/versions.sh"
-. "$here/common.sh"
+. "$here/../common.sh"
 
 repository_root="$here/.."
 record_dir="$bundle/Contents/Resources/weppe-wine"
@@ -25,12 +25,7 @@ write_record() {
         echo "dxmt release: $DXMT_RELEASE_URL sha256:$DXMT_RELEASE_SHA256"
         echo "windows toolchain: $LLVM_MINGW_URL sha256:$LLVM_MINGW_SHA256"
         echo "patches:"
-        for component in wine dxmt; do
-            while read -r name; do
-                patch_file="$repository_root/patches/$component/$name"
-                echo "  $component/$name sha256:$(shasum -a 256 "$patch_file" | cut -d ' ' -f 1)"
-            done < "$repository_root/patches/$component/series"
-        done
+        list_patches "$repository_root/patches" wine/macos.series dxmt/series
     } > "$record_dir/build.txt"
 }
 

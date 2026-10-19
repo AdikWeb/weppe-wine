@@ -7,7 +7,7 @@ wine_build=${2:?$usage}
 bundle=${3:?$usage}
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/versions.sh"
-. "$here/common.sh"
+. "$here/../common.sh"
 
 patches="$here/../patches/dxmt"
 release_dir="$work/dxmt-release"
