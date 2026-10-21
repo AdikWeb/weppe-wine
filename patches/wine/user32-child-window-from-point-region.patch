@@ -1,0 +1,85 @@
+Make ChildWindowFromPointEx, ChildWindowFromPoint and RealChildWindowFromPoint
+skip a child whose window region does not contain the point.
+
+win32u's NtUserChildWindowFromPointEx tests only the window rectangle, so a
+child shaped with SetWindowRgn is returned for points it does not cover, while
+WindowFromPoint and Windows (ReactOS: IntChildWindowFromPointEx tests hrgnClip
+through IntPtInWindow) pass over it. Qt 5 finds the receiver of a wheel event
+with ChildWindowFromPointEx when WM_POINTER is unavailable, which is the case
+under Wine (no SkipPointerFrameMessages): in DingTalk the wheel went to a frame
+overlay shaped to a few pixels along the edges of the chat instead of the chat.
+
+diff --git a/dlls/user32/win.c b/dlls/user32/win.c
+index bcf88ee..905c7b1 100644
+--- a/dlls/user32/win.c
++++ b/dlls/user32/win.c
+@@ -702,12 +702,43 @@ HWND WINAPI WindowFromPoint( POINT pt )
+ }
+ 
+ 
++static BOOL point_in_window_region( HWND hwnd, POINT screen_pt )
++{
++    HRGN region = CreateRectRgn( 0, 0, 0, 0 );
++    BOOL inside = TRUE;
++    RECT rect;
++
++    if (GetWindowRgn( hwnd, region ) != ERROR && GetWindowRect( hwnd, &rect ))
++        inside = PtInRegion( region, screen_pt.x - rect.left, screen_pt.y - rect.top );
++    DeleteObject( region );
++    return inside;
++}
++
++static BOOL child_contains_point( HWND child, POINT screen_pt, UINT flags )
++{
++    DWORD style = GetWindowLongW( child, GWL_STYLE );
++    RECT rect;
++
++    if (!GetWindowRect( child, &rect ) || !PtInRect( &rect, screen_pt )) return FALSE;
++    if ((flags & CWP_SKIPINVISIBLE) && !(style & WS_VISIBLE)) return FALSE;
++    if ((flags & CWP_SKIPDISABLED) && (style & WS_DISABLED)) return FALSE;
++    if ((flags & CWP_SKIPTRANSPARENT) && (GetWindowLongW( child, GWL_EXSTYLE ) & WS_EX_TRANSPARENT)) return FALSE;
++    return point_in_window_region( child, screen_pt );
++}
++
++static HWND next_child_from_point( HWND child, POINT screen_pt, UINT flags )
++{
++    while ((child = GetWindow( child, GW_HWNDNEXT )))
++        if (child_contains_point( child, screen_pt, flags )) return child;
++    return 0;
++}
++
+ /*******************************************************************
+  *           ChildWindowFromPoint (USER32.@)
+  */
+ HWND WINAPI ChildWindowFromPoint( HWND parent, POINT pt )
+ {
+-    return NtUserChildWindowFromPointEx( parent, pt.x, pt.y, CWP_ALL );
++    return ChildWindowFromPointEx( parent, pt, CWP_ALL );
+ }
+ 
+ /*******************************************************************
+@@ -715,7 +746,7 @@ HWND WINAPI ChildWindowFromPoint( HWND parent, POINT pt )
+  */
+ HWND WINAPI RealChildWindowFromPoint( HWND parent, POINT pt )
+ {
+-    return NtUserRealChildWindowFromPoint( parent, pt.x, pt.y );
++    return ChildWindowFromPointEx( parent, pt, CWP_SKIPTRANSPARENT | CWP_SKIPINVISIBLE );
+ }
+ 
+ /*******************************************************************
+@@ -723,7 +754,14 @@ HWND WINAPI RealChildWindowFromPoint( HWND parent, POINT pt )
+  */
+ HWND WINAPI ChildWindowFromPointEx( HWND parent, POINT pt, UINT flags )
+ {
+-    return NtUserChildWindowFromPointEx( parent, pt.x, pt.y, flags );
++    HWND child = NtUserChildWindowFromPointEx( parent, pt.x, pt.y, flags );
++    POINT screen_pt = pt;
++
++    if (!child || child == parent) return child;
++    MapWindowPoints( parent, 0, &screen_pt, 1 );
++    if (point_in_window_region( child, screen_pt )) return child;
++    child = next_child_from_point( child, screen_pt, flags );
++    return child ? child : parent;
+ }
+ 
+ 

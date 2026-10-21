@@ -125,6 +125,13 @@ jobs:
             grep -q 'cloud files platform info: ok' "$RUNNER_TEMP/results/cloud-files-$target.log"
           done
 
+      - name: Look up a child window behind another one's window region, as Qt 5 does for the mouse wheel
+        run: |
+          for target in i686 x86_64; do
+            "$WINE" "$RUNNER_TEMP/tests/child-window-from-point-region-$target.exe" | tee "$RUNNER_TEMP/results/child-window-from-point-$target.log"
+            grep -q 'child window from point region: ok' "$RUNNER_TEMP/results/child-window-from-point-$target.log"
+          done
+
       - name: Draw a triangle with Direct3D 11
         run: |
           mkdir -p "$RUNNER_TEMP/results"

@@ -8,3 +8,4 @@ winemac-remote-metal.patch
 winemac-dxmt-child-windows.patch
 propsys-init-propvariant-from-filetime.patch
 cldapi-cfgetplatforminfo.patch
+user32-child-window-from-point-region.patch

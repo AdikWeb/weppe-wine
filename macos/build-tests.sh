@@ -18,3 +18,4 @@ compiler="$LLVM_MINGW/bin/x86_64-w64-mingw32-clang"
 "$compiler" -O2 -Wall "$tests/d3d11-shared-texture.c" -ld3d11 -ldxgi -luuid -o "$output/d3d11-shared-texture.exe"
 build_test_for_both_architectures "$tests/propvariant-filetime.c" "$output"
 build_test_for_both_architectures "$tests/cloud-files-platform-info.c" "$output"
+build_test_for_both_architectures "$tests/child-window-from-point-region.c" "$output" -lgdi32 -luser32

@@ -12,6 +12,7 @@ on:
       - patches/wine/**
       - tests/propvariant-filetime.c
       - tests/cloud-files-platform-info.c
+      - tests/child-window-from-point-region.c
 
 concurrency:
   group: linux-${{ github.ref }}
@@ -113,9 +114,40 @@ jobs:
             grep -q 'cloud files platform info: ok' "$RUNNER_TEMP/cloud-files-$target.log"
           done
 
+      - name: Install a virtual X server
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends xvfb xauth
+
+      - name: Look up a child window behind another one's window region, as Qt 5 does for the mouse wheel
+        run: |
+          for target in i686 x86_64; do
+            xvfb-run -a "$WINE" "$RUNNER_TEMP/tests/child-window-from-point-region-$target.exe" | tee "$RUNNER_TEMP/child-window-from-point-$target.log"
+            grep -q 'child window from point region: ok' "$RUNNER_TEMP/child-window-from-point-$target.log"
+          done
+
+  windows:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: weppe-wine-linux-tests
+          path: ${{ runner.temp }}/tests
+
+      - name: Check on Windows itself that a window region hides a child from ChildWindowFromPointEx
+        shell: pwsh
+        run: |
+          foreach ($target in 'i686', 'x86_64') {
+            $output = & "$env:RUNNER_TEMP\tests\child-window-from-point-region-$target.exe"
+            $output
+            if ($LASTEXITCODE -ne 0 -or -not ($output -match 'child window from point region: ok')) { exit 1 }
+          }
+
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [build, test]
+    needs: [build, test, windows]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

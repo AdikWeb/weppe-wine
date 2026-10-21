@@ -1,2 +1,3 @@
 propsys-init-propvariant-from-filetime.patch
 cldapi-cfgetplatforminfo.patch
+user32-child-window-from-point-region.patch

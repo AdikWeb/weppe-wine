@@ -78,9 +78,10 @@ prepare_wine_source() {
 
 build_test_for_both_architectures() {
     test_source=$1 test_output=$2
+    shift 2
     test_name=$(basename "$test_source" .c)
     for target in $WINDOWS_TARGETS; do
-        "$LLVM_MINGW/bin/$target-w64-mingw32-clang" -O2 -Wall "$test_source" -o "$test_output/$test_name-$target.exe"
+        "$LLVM_MINGW/bin/$target-w64-mingw32-clang" -O2 -Wall "$test_source" "$@" -o "$test_output/$test_name-$target.exe"
     done
 }
 

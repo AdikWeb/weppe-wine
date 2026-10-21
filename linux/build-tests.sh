@@ -12,3 +12,4 @@ mkdir -p "$work" "$output"
 use_llvm_mingw "$work"
 build_test_for_both_architectures "$here/../tests/propvariant-filetime.c" "$output"
 build_test_for_both_architectures "$here/../tests/cloud-files-platform-info.c" "$output"
+build_test_for_both_architectures "$here/../tests/child-window-from-point-region.c" "$output" -lgdi32 -luser32
