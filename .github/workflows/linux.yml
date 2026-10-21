@@ -120,10 +120,13 @@ jobs:
           sudo apt-get install -y -q --no-install-recommends xvfb xauth
 
       - name: Look up a child window behind another one's window region, as Qt 5 does for the mouse wheel
+        timeout-minutes: 5
         run: |
           for target in i686 x86_64; do
-            xvfb-run -a "$WINE" "$RUNNER_TEMP/tests/child-window-from-point-region-$target.exe" | tee "$RUNNER_TEMP/child-window-from-point-$target.log"
-            grep -q 'child window from point region: ok' "$RUNNER_TEMP/child-window-from-point-$target.log"
+            log="$RUNNER_TEMP/child-window-from-point-$target.log"
+            xvfb-run -a sh -c '"$WINE" "$1" > "$2" 2>&1; "$(dirname "$WINE")/wineserver" -w' sh "$RUNNER_TEMP/tests/child-window-from-point-region-$target.exe" "$log"
+            cat "$log"
+            grep -q 'child window from point region: ok' "$log"
           done
 
   windows:
